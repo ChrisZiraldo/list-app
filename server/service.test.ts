@@ -31,6 +31,15 @@ describe('ListsService', () => {
     ]);
   });
 
+  it('stores an explicit reminder time for an agenda item', () => {
+    const service = createService();
+    const agenda = service.createList({ kind: 'agenda', title: 'Family calendar' });
+
+    const item = service.createItem(agenda.id, { text: 'Leave for dentist', reminderAt: '2026-08-03T13:45:00.000Z' });
+
+    expect(service.getList(agenda.id).items).toEqual([expect.objectContaining({ id: item.id, reminderAt: '2026-08-03T13:45:00.000Z' })]);
+  });
+
   it('rejects a list title that becomes empty after normalization', () => {
     const service = createService();
 

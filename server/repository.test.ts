@@ -30,10 +30,12 @@ describe('ListsRepository', () => {
 
   it('rolls back a failed transaction', () => {
     const repository = new ListsRepository(':memory:');
-    expect(() => repository.transaction(() => {
+    expect(() =>
+      repository.transaction(() => {
       repository.createList({ title: 'Temporary', kind: 'todo' });
       throw new Error('stop');
-    })).toThrow('stop');
+      }),
+    ).toThrow('stop');
     expect(repository.listLists()).toEqual([]);
   });
 

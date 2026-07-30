@@ -83,12 +83,15 @@ describe('Lists MCP server', () => {
 describe('postReminderWebhook', () => {
   it('requires both webhook environment values before exposing reminder delivery', () => {
     expect(reminderWebhookFromEnvironment({})).toBeUndefined();
-    expect(() => reminderWebhookFromEnvironment({ LISTS_REMINDER_WEBHOOK_URL: 'https://example.test/reminders' }))
-      .toThrow('LISTS_REMINDER_WEBHOOK_URL and LISTS_REMINDER_WEBHOOK_SECRET must be set together');
-    expect(reminderWebhookFromEnvironment({
+    expect(() => reminderWebhookFromEnvironment({ LISTS_REMINDER_WEBHOOK_URL: 'https://example.test/reminders' })).toThrow(
+      'LISTS_REMINDER_WEBHOOK_URL and LISTS_REMINDER_WEBHOOK_SECRET must be set together',
+    );
+    expect(
+      reminderWebhookFromEnvironment({
       LISTS_REMINDER_WEBHOOK_URL: 'https://example.test/reminders',
       LISTS_REMINDER_WEBHOOK_SECRET: 'test-shared-secret',
-    })).toEqual({ url: 'https://example.test/reminders', secret: 'test-shared-secret' });
+      }),
+    ).toEqual({ url: 'https://example.test/reminders', secret: 'test-shared-secret' });
   });
 
   it('exposes a reminder tool only when a webhook destination is configured', async () => {

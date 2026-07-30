@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { buildApi } from './api.js';
 import { ListsService } from './service.js';
@@ -36,6 +37,50 @@ describe('Lists HTTP API', () => {
     const detail = await app.inject({ method: 'GET', url: `/api/lists/${list.id}` });
     expect(detail.json()).toMatchObject({ id: list.id, items: [expect.objectContaining({ text: 'Milk' })] });
     await app.close();
+  });
+
+  it('accepts an explicit reminder time for an agenda item', async () => {
+    const app = createApi();
+    const agenda = (await app.inject({ method: 'POST', url: '/api/lists', payload: { title: 'Family calendar', kind: 'agenda' } })).json();
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/lists/${agenda.id}/items`,
+      payload: { text: 'Leave for dentist', reminderAt: '2026-08-03T13:45:00.000Z' },
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ text: 'Leave for dentist', reminderAt: '2026-08-03T13:45:00.000Z' });
+    await app.close();
+  });
+
+  it('posts an authenticated reminder request when an agenda item has a reminder time', async () => {
+    const receiver = Fastify();
+    let received: unknown;
+    receiver.post('/reminders', async (request) => {
+      received = request.body;
+      return { accepted: true };
+    });
+    await receiver.listen({ host: '127.0.0.1', port: 0 });
+    const address = receiver.server.address();
+    if (!address || typeof address === 'string') throw new Error('expected TCP listener');
+    const app = buildApi(new ListsService(new Database(':memory:')), {
+      reminderWebhook: { url: `http://127.0.0.1:${address.port}/reminders`, secret: 'test-shared-secret' },
+    });
+    const agenda = (await app.inject({ method: 'POST', url: '/api/lists', payload: { title: 'Family calendar', kind: 'agenda' } })).json();
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/lists/${agenda.id}/items`,
+      payload: { text: 'Leave for dentist', reminderAt: '2026-08-03T13:45:00.000Z' },
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(received).toEqual({
+      event: 'lists.reminder.requested',
+      reminder: expect.objectContaining({ title: 'Leave for dentist', when: '2026-08-03T13:45:00.000Z', listId: agenda.id }),
+    });
+    await Promise.all([app.close(), receiver.close()]);
   });
 
   it('marks an item complete through a patch request', async () => {
