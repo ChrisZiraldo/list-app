@@ -6,6 +6,7 @@ import { App } from './App.js';
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('App', () => {
@@ -63,8 +64,8 @@ describe('App', () => {
       expect(fetch).toHaveBeenLastCalledWith(
         '/lists/api/lists/list-1/items',
         expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ text: 'Pack bags', priority: 'high', dueDate: '2026-08-01', note: 'check passport' }),
+          method: 'POST',
+          body: JSON.stringify({ text: 'Pack bags', priority: 'high', dueDate: '2026-08-01', note: 'check passport' }),
         }),
       ),
     );
@@ -120,6 +121,56 @@ describe('App', () => {
       ),
     );
     expect(await screen.findByText(/Reminder Aug 3/)).not.toBeNull();
+  });
+
+  it('refreshes the selected list after external changes', async () => {
+    vi.stubEnv('BASE_URL', '/lists/');
+    let visibilityState: DocumentVisibilityState = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibilityState });
+    const shoppingList = { id: 'list-1', title: 'Shopping', kind: 'shopping', pinned: false, favorite: false };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([shoppingList]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...shoppingList,
+            items: [{ id: 'rice', text: 'Rice', completed: false, note: null, priority: 'normal', dueDate: null, reminderAt: null, position: 0 }],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([shoppingList]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...shoppingList,
+            items: [{ id: 'muffins', text: 'Mini muffins', completed: false, note: null, priority: 'normal', dueDate: null, reminderAt: null, position: 0 }],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+    vi.stubGlobal('fetch', fetch);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Shopping/ }));
+    await screen.findByText('Rice');
+
+    visibilityState = 'hidden';
+    fireEvent(document, new Event('visibilitychange'));
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    visibilityState = 'visible';
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
+    expect(await screen.findByText('Mini muffins')).not.toBeNull();
+    expect(screen.queryByText('Rice')).toBeNull();
   });
 
   it('deletes a list after confirming', async () => {
