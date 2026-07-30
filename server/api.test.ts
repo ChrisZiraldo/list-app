@@ -77,7 +77,7 @@ describe('Lists HTTP API', () => {
 
     expect(created.statusCode).toBe(201);
     expect(received).toEqual({
-      event: 'lists.reminder.requested',
+      event_type: 'lists.reminder.requested',
       reminder: expect.objectContaining({ title: 'Leave for dentist', when: '2026-08-03T13:45:00.000Z', listId: agenda.id }),
     });
     await Promise.all([app.close(), receiver.close()]);
