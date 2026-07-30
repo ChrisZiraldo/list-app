@@ -120,7 +120,7 @@ describe('postReminderWebhook', () => {
     });
 
     expect(received).toEqual({
-      event: 'lists.reminder.requested',
+      event_type: 'lists.reminder.requested',
       reminder: { title: 'Take bins out', when: '2026-08-01T09:00:00.000Z' },
     });
     await Promise.all([client.close(), server.close(), receiver.close()]);
@@ -146,7 +146,7 @@ describe('postReminderWebhook', () => {
     });
 
     const rawBody = JSON.stringify({
-      event: 'lists.reminder.requested',
+      event_type: 'lists.reminder.requested',
       reminder: { title: 'Take bins out', when: '2026-08-01T09:00:00.000Z', listId: 'list-1', itemId: 'item-1' },
     });
     const timestamp = '1785412800';

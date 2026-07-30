@@ -172,7 +172,7 @@ export function reminderWebhookFromEnvironment(environment: Record<string, strin
 }
 
 export async function postReminderWebhook({ url, secret, reminder, now = () => new Date() }: ReminderWebhookOptions): Promise<void> {
-  const body = JSON.stringify({ event: 'lists.reminder.requested', reminder });
+  const body = JSON.stringify({ event_type: 'lists.reminder.requested', reminder });
   const timestamp = Math.floor(now().getTime() / 1_000).toString();
   const signature = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
   const response = await fetch(url, {
