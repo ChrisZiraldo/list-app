@@ -4,13 +4,24 @@ import { extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { registerListsApi } from './api.js';
+import type { ReminderWebhookDestination } from './mcp.js';
 import { ListsService } from './service.js';
 
-const staticTypes: Record<string, string> = { '.css': 'text/css', '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const staticTypes: Record<string, string> = {
+  '.css': 'text/css',
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+};
 
 // The app is reachable externally under /lists (shared/base-path.ts), but Tailscale
 // Serve strips that mount prefix before forwarding, so the server itself is unprefixed.
-export function createApp(databasePath: string, clientDirectory = fileURLToPath(new URL('../client', import.meta.url))) {
+export function createApp(
+  databasePath: string,
+  clientDirectory = fileURLToPath(new URL('../client', import.meta.url)),
+  options: { reminderWebhook?: ReminderWebhookDestination } = {},
+) {
   const database = new Database(databasePath);
   const service = new ListsService(database);
   const root = resolve(clientDirectory);
@@ -20,7 +31,7 @@ export function createApp(databasePath: string, clientDirectory = fileURLToPath(
 
   app.get('/health', async () => ({ status: 'ok' }));
 
-  registerListsApi(app, service);
+  registerListsApi(app, service, options);
 
   app.get('/*', async (request, reply) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;

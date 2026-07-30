@@ -18,7 +18,7 @@ The app is served under the `/lists` path (see `shared/base-path.ts`) — both t
 
 `server/repository.ts` owns SQLite schema initialization, immutable UUID list/item identities, stable item positions, title validation, and transactions. `server/service.ts` is the shared domain adapter. Live list data is stored in the configured SQLite database.
 
-Lists have a title, kind (`todo`/`shopping`/`agenda`), and `pinned`/`favorite` flags. Items have text, `priority` (`low`/`normal`/`high`), `dueDate`, `snoozedUntil`, a `note`, completion state, and a stable manual position that can be changed via `moveItem`/the `/move` endpoint.
+Lists have a title, kind (`todo`/`shopping`/`agenda`), and `pinned`/`favorite` flags. Items have text, `priority` (`low`/`normal`/`high`), `dueDate`, an optional `reminderAt` timestamp for agenda items, `snoozedUntil`, a `note`, completion state, and a stable manual position that can be changed via `moveItem`/the `/move` endpoint.
 
 Both lists and items can be deleted. Deleting a list cascades to its items.
 
@@ -45,7 +45,7 @@ The process closes its SQLite connection and exits cleanly on `SIGTERM`/`SIGINT`
 
 `server/mcp-main.ts` exposes `list_lists`, `get_list`, `create_list`, `update_list`, `delete_list`, `create_item`, `update_item`, `delete_item`, and `move_item` over stdio MCP. Point an MCP client at `node /home/hermes/lists-app/dist/server/mcp-main.js` after building and set `LISTS_DATABASE_PATH` to the SQLite database if it is not the working-directory default.
 
-To expose the optional `request_reminder` tool, set both `LISTS_REMINDER_WEBHOOK_URL` and `LISTS_REMINDER_WEBHOOK_SECRET`. It POSTs `lists.reminder.requested` payloads using Hermes generic HMAC V2 headers: `X-Webhook-Timestamp` and `X-Webhook-Signature-V2`, where the signature is HMAC-SHA256 of `<timestamp>.<raw JSON body>`. It deliberately does not configure or enable a Hermes webhook route; that deployment step remains separate.
+Set both `LISTS_REMINDER_WEBHOOK_URL` and `LISTS_REMINDER_WEBHOOK_SECRET` to enable reminder delivery. The HTTP API automatically POSTs a `lists.reminder.requested` event when an agenda item is created with `reminderAt`; the optional MCP `request_reminder` tool uses the same destination. Requests use Hermes generic HMAC V2 headers: `X-Webhook-Timestamp` and `X-Webhook-Signature-V2`, where the signature is HMAC-SHA256 of `<timestamp>.<raw JSON body>`. Configure the matching Hermes webhook route separately to create the one-time cron delivery.
 
 ## PWA
 

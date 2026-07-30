@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 
@@ -54,5 +55,30 @@ describe('createApp', () => {
     expect(health.statusCode).toBe(200);
     expect(health.json()).toEqual({ status: 'ok' });
     await app.close();
+  });
+
+  it('forwards agenda reminders to its configured webhook', async () => {
+    const receiver = Fastify();
+    let received: unknown;
+    receiver.post('/reminders', async (request) => {
+      received = request.body;
+      return { accepted: true };
+    });
+    await receiver.listen({ host: '127.0.0.1', port: 0 });
+    const address = receiver.server.address();
+    if (!address || typeof address === 'string') throw new Error('expected TCP listener');
+    const app = createApp(':memory:', undefined, {
+      reminderWebhook: { url: `http://127.0.0.1:${address.port}/reminders`, secret: 'test-shared-secret' },
+    });
+    const agenda = (await app.inject({ method: 'POST', url: '/api/lists', payload: { title: 'Family calendar', kind: 'agenda' } })).json();
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/lists/${agenda.id}/items`,
+      payload: { text: 'Leave for dentist', reminderAt: '2026-08-03T13:45:00.000Z' },
+    });
+
+    expect(received).toMatchObject({ reminder: { title: 'Leave for dentist', when: '2026-08-03T13:45:00.000Z' } });
+    await Promise.all([app.close(), receiver.close()]);
   });
 });

@@ -13,6 +13,7 @@ type Item = {
   note: string | null;
   priority: Priority | null;
   dueDate: string | null;
+  reminderAt: string | null;
   position: number;
 };
 type ListDetail = List & { items: Item[] };
@@ -70,6 +71,14 @@ function formatDueDate(dueDate: string): string {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function toReminderIso(value: string): string | undefined {
+  return value ? new Date(value).toISOString() : undefined;
+}
+
+function formatReminderTime(reminderAt: string): string {
+  return new Date(reminderAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 function PlusIcon() {
   return (
     <span className="qa-icon" aria-hidden="true">
@@ -88,17 +97,19 @@ export function App() {
   const [newItemText, setNewItemText] = useState('');
   const [newItemPriority, setNewItemPriority] = useState<Priority>('normal');
   const [newItemDueDate, setNewItemDueDate] = useState('');
+  const [newItemReminderAt, setNewItemReminderAt] = useState('');
   const [newItemNote, setNewItemNote] = useState('');
   const [showItemDetails, setShowItemDetails] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('manual');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemDraft, setItemDraft] = useState<{ text: string; note: string; priority: Priority; dueDate: string }>({
+  const [itemDraft, setItemDraft] = useState<{ text: string; note: string; priority: Priority; dueDate: string; reminderAt: string }>({
     text: '',
     note: '',
     priority: 'normal',
     dueDate: '',
+    reminderAt: '',
   });
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Set<string>>(new Set());
@@ -238,6 +249,7 @@ export function App() {
           text: newItemText,
           priority: newItemPriority,
           dueDate: newItemDueDate || undefined,
+          reminderAt: selected.kind === 'agenda' ? toReminderIso(newItemReminderAt) : undefined,
           note: newItemNote || undefined,
         }),
       }),
@@ -247,6 +259,7 @@ export function App() {
     setNewItemText('');
     setNewItemPriority('normal');
     setNewItemDueDate('');
+    setNewItemReminderAt('');
     setNewItemNote('');
   }
 
@@ -266,7 +279,13 @@ export function App() {
 
   function startEditItem(item: Item) {
     setEditingItemId(item.id);
-    setItemDraft({ text: item.text, note: item.note ?? '', priority: item.priority ?? 'normal', dueDate: item.dueDate ?? '' });
+    setItemDraft({
+      text: item.text,
+      note: item.note ?? '',
+      priority: item.priority ?? 'normal',
+      dueDate: item.dueDate ?? '',
+      reminderAt: item.reminderAt ? item.reminderAt.slice(0, 16) : '',
+    });
   }
 
   async function saveItemEdit(itemId: string) {
@@ -274,7 +293,13 @@ export function App() {
       requestJson<Item>(apiPath(`/items/${itemId}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: itemDraft.text, note: itemDraft.note || null, priority: itemDraft.priority, dueDate: itemDraft.dueDate || null }),
+        body: JSON.stringify({
+          text: itemDraft.text,
+          note: itemDraft.note || null,
+          priority: itemDraft.priority,
+          dueDate: itemDraft.dueDate || null,
+          reminderAt: selected?.kind === 'agenda' ? (toReminderIso(itemDraft.reminderAt) ?? null) : null,
+        }),
       }),
     );
     if (!updated) return;
@@ -510,7 +535,7 @@ export function App() {
                               />
                             )}
                           </div>
-                          {(item.dueDate || item.note) && (
+                          {(item.dueDate || item.reminderAt || item.note) && (
                             <div className="meta">
                               {item.dueDate && (
                                 <span className={'due' + (isOverdue(item.dueDate, item.completed) ? ' overdue' : '')}>
@@ -518,6 +543,7 @@ export function App() {
                                   {formatDueDate(item.dueDate)}
                                 </span>
                               )}
+                              {item.reminderAt && <span className="due">Reminder {formatReminderTime(item.reminderAt)}</span>}
                               {item.note && <span className="note">{item.note}</span>}
                             </div>
                           )}
@@ -588,6 +614,12 @@ export function App() {
                       Due date
                       <input type="date" value={newItemDueDate} onChange={(event) => setNewItemDueDate(event.target.value)} />
                     </label>
+                    {selected.kind === 'agenda' && (
+                      <label>
+                        Reminder time
+                        <input type="datetime-local" value={newItemReminderAt} onChange={(event) => setNewItemReminderAt(event.target.value)} />
+                      </label>
+                    )}
                     <label>
                       Note
                       <input value={newItemNote} onChange={(event) => setNewItemNote(event.target.value)} placeholder="Optional note" />

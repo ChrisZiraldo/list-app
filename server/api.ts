@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { postReminderWebhook, type ReminderWebhookDestination } from './mcp.js';
 import { ListsService } from './service.js';
 
 const listInput = z.object({
@@ -18,13 +19,14 @@ const itemInput = z.object({
   note: z.string().optional(),
   priority: z.enum(['low', 'normal', 'high']).optional(),
   dueDate: z.string().optional(),
+  reminderAt: z.string().optional().nullable(),
   snoozedUntil: z.string().optional(),
   completed: z.boolean().optional(),
 });
 const itemIdParams = z.object({ itemId: z.uuid() });
 const moveInput = z.object({ beforeItemId: z.uuid().optional() });
 
-export function registerListsApi(app: FastifyInstance, service: ListsService) {
+export function registerListsApi(app: FastifyInstance, service: ListsService, options: { reminderWebhook?: ReminderWebhookDestination } = {}) {
   app.get('/api/lists', () => service.listLists());
   app.get('/api/lists/:listId', (request) => service.getList(listIdParams.parse(request.params).listId));
 
@@ -42,7 +44,14 @@ export function registerListsApi(app: FastifyInstance, service: ListsService) {
 
   app.post('/api/lists/:listId/items', async (request, reply) => {
     const listId = listIdParams.parse(request.params).listId;
-    return reply.code(201).send(service.createItem(listId, itemInput.parse(request.body)));
+    const item = service.createItem(listId, itemInput.parse(request.body));
+    if (options.reminderWebhook && item.reminderAt && service.getList(listId).kind === 'agenda') {
+      await postReminderWebhook({
+        ...options.reminderWebhook,
+        reminder: { title: item.text, when: item.reminderAt, listId: item.listId, itemId: item.id },
+      });
+    }
+    return reply.code(201).send(item);
   });
 
   app.patch('/api/items/:itemId', (request) => service.updateItem(itemIdParams.parse(request.params).itemId, itemInput.partial().parse(request.body)));
@@ -65,8 +74,8 @@ export function registerListsApi(app: FastifyInstance, service: ListsService) {
   });
 }
 
-export function buildApi(service: ListsService) {
+export function buildApi(service: ListsService, options?: { reminderWebhook?: ReminderWebhookDestination }) {
   const app = Fastify();
-  registerListsApi(app, service);
+  registerListsApi(app, service, options);
   return app;
 }

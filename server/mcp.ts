@@ -18,27 +18,44 @@ function jsonContent(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
 }
 
-export function createListsMcpServer({ service, reminderWebhook }: {
+export function createListsMcpServer({
+  service,
+  reminderWebhook,
+}: {
   service: ListsService;
   reminderWebhook?: Pick<ReminderWebhookOptions, 'url' | 'secret'>;
 }) {
   const server = new McpServer({ name: 'lists-app', version: '0.1.0' });
 
-  server.registerTool('list_lists', {
+  server.registerTool(
+    'list_lists',
+    {
     description: 'List all Lists App lists.',
-  }, async () => jsonContent(service.listLists()));
+    },
+    async () => jsonContent(service.listLists()),
+  );
 
-  server.registerTool('get_list', {
+  server.registerTool(
+    'get_list',
+    {
     description: 'Get one list and its items.',
     inputSchema: { listId },
-  }, async ({ listId: id }) => jsonContent(service.getList(id)));
+    },
+    async ({ listId: id }) => jsonContent(service.getList(id)),
+  );
 
-  server.registerTool('create_list', {
+  server.registerTool(
+    'create_list',
+    {
     description: 'Create a new todo, shopping, or agenda list.',
     inputSchema: { title: z.string(), kind: z.enum(['todo', 'shopping', 'agenda']) },
-  }, async (input) => jsonContent(service.createList(input)));
+    },
+    async (input) => jsonContent(service.createList(input)),
+  );
 
-  server.registerTool('update_list', {
+  server.registerTool(
+    'update_list',
+    {
     description: 'Rename a list, change its kind, or set pinned/favorite.',
     inputSchema: {
       listId,
@@ -47,50 +64,84 @@ export function createListsMcpServer({ service, reminderWebhook }: {
       pinned: z.boolean().optional(),
       favorite: z.boolean().optional(),
     },
-  }, async ({ listId: id, ...input }) => jsonContent(service.updateList(id, input)));
+    },
+    async ({ listId: id, ...input }) => jsonContent(service.updateList(id, input)),
+  );
 
-  server.registerTool('delete_list', {
+  server.registerTool(
+    'delete_list',
+    {
     description: 'Delete a list and all of its items.',
     inputSchema: { listId },
-  }, async ({ listId: id }) => {
+    },
+    async ({ listId: id }) => {
     service.deleteList(id);
     return jsonContent({ deleted: true, listId: id });
-  });
+    },
+  );
 
-  server.registerTool('create_item', {
+  server.registerTool(
+    'create_item',
+    {
     description: 'Add an item to a list.',
-    inputSchema: { listId, text: z.string(), note: itemInput.note, priority: itemInput.priority, dueDate: itemInput.dueDate, snoozedUntil: itemInput.snoozedUntil, completed: itemInput.completed },
-  }, async ({ listId: id, ...input }) => jsonContent(service.createItem(id, input)));
+      inputSchema: {
+        listId,
+        text: z.string(),
+        note: itemInput.note,
+        priority: itemInput.priority,
+        dueDate: itemInput.dueDate,
+        snoozedUntil: itemInput.snoozedUntil,
+        completed: itemInput.completed,
+      },
+    },
+    async ({ listId: id, ...input }) => jsonContent(service.createItem(id, input)),
+  );
 
-  server.registerTool('update_item', {
+  server.registerTool(
+    'update_item',
+    {
     description: 'Update item text, details, or completion state.',
     inputSchema: { itemId, ...itemInput },
-  }, async ({ itemId: id, ...input }) => jsonContent(service.updateItem(id, input)));
+    },
+    async ({ itemId: id, ...input }) => jsonContent(service.updateItem(id, input)),
+  );
 
-  server.registerTool('delete_item', {
+  server.registerTool(
+    'delete_item',
+    {
     description: 'Delete an item from its list.',
     inputSchema: { itemId },
-  }, async ({ itemId: id }) => {
+    },
+    async ({ itemId: id }) => {
     service.deleteItem(id);
     return jsonContent({ deleted: true, itemId: id });
-  });
+    },
+  );
 
-  server.registerTool('move_item', {
+  server.registerTool(
+    'move_item',
+    {
     description: 'Reorder an item within its list, placing it before another item (or at the end if omitted).',
     inputSchema: { itemId, beforeItemId: itemId.optional() },
-  }, async ({ itemId: id, beforeItemId }) => {
+    },
+    async ({ itemId: id, beforeItemId }) => {
     service.moveItem(id, beforeItemId);
     return jsonContent({ moved: true, itemId: id });
-  });
+    },
+  );
 
   if (reminderWebhook) {
-    server.registerTool('request_reminder', {
+    server.registerTool(
+      'request_reminder',
+      {
       description: 'Request a Hermes reminder through the configured webhook destination.',
       inputSchema: { title: z.string(), when: z.string(), listId: listId.optional(), itemId: itemId.optional() },
-    }, async (reminder) => {
+      },
+      async (reminder) => {
       await postReminderWebhook({ ...reminderWebhook, reminder });
       return jsonContent({ requested: true, reminder });
-    });
+      },
+    );
   }
 
   return server;
@@ -109,6 +160,8 @@ type ReminderWebhookOptions = {
   reminder: ReminderRequest;
   now?: () => Date;
 };
+
+export type ReminderWebhookDestination = Pick<ReminderWebhookOptions, 'url' | 'secret'>;
 
 export function reminderWebhookFromEnvironment(environment: Record<string, string | undefined>) {
   const url = environment.LISTS_REMINDER_WEBHOOK_URL;
