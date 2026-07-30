@@ -146,6 +146,22 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      void reloadLists();
+      if (selected?.id) void reloadSelected(selected.id);
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+    // Reload helpers intentionally use the latest app state; this effect resets when the selected list changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  useEffect(() => {
     if (!menuOpen) return;
     function handleClick(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
