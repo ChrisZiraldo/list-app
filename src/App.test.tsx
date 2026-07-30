@@ -64,6 +64,7 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Weekend/ }));
     await screen.findByRole('heading', { name: 'Weekend' });
 
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete list' }));
 
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/lists/api/lists/list-1', expect.objectContaining({ method: 'DELETE' })));
