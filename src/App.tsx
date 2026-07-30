@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
 
 type ListKind = 'todo' | 'shopping' | 'agenda';
@@ -18,7 +18,9 @@ type Item = {
 type ListDetail = List & { items: Item[] };
 
 const KIND_LABELS: Record<ListKind, string> = { todo: 'Todo', shopping: 'Shopping', agenda: 'Agenda' };
+const KINDS = Object.keys(KIND_LABELS) as ListKind[];
 const PRIORITY_RANK: Record<Priority, number> = { high: 0, normal: 1, low: 2 };
+const PRIORITY_LABELS: Record<Priority, string> = { high: 'High priority', normal: 'Normal priority', low: 'Low priority' };
 
 function apiPath(path: string) {
   return `${import.meta.env.BASE_URL}api${path}`;
@@ -56,6 +58,17 @@ function neighborForMove(manualOrder: Item[], itemId: string, direction: 'up' | 
   return { beforeItemId: targetIndex < manualOrder.length ? manualOrder[targetIndex].id : undefined };
 }
 
+function isOverdue(dueDate: string | null, completed: boolean): boolean {
+  if (!dueDate || completed) return false;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  return dueDate < todayIso;
+}
+
+function formatDueDate(dueDate: string): string {
+  const [year, month, day] = dueDate.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function App() {
   const [lists, setLists] = useState<List[]>([]);
   const [selected, setSelected] = useState<ListDetail | null>(null);
@@ -73,6 +86,8 @@ export function App() {
   const [itemDraft, setItemDraft] = useState<{ text: string; note: string; priority: Priority; dueDate: string }>({ text: '', note: '', priority: 'normal', dueDate: '' });
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Set<string>>(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   async function withPending<T>(key: string, action: () => Promise<T>): Promise<T | undefined> {
     setPending((current) => new Set(current).add(key));
@@ -103,6 +118,15 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
   const orderedLists = useMemo(
     () => [...lists].sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(b.favorite) - Number(a.favorite)),
     [lists],
@@ -128,6 +152,7 @@ export function App() {
     setSortMode('manual');
     setEditingItemId(null);
     setEditingTitle(false);
+    setMenuOpen(false);
     await reloadSelected(list.id);
   }
 
@@ -248,61 +273,129 @@ export function App() {
   }
 
   return <main className="app-shell">
-    <header><p className="eyebrow">Lists</p><h1>Your lists</h1></header>
+    <header className="app-top">
+      <p className="eyebrow">Lists</p>
+      <h1>Your lists</h1>
+    </header>
     {error && <p role="alert" className="error" onClick={() => setError('')}>{error}</p>}
 
-    <form className="capture" onSubmit={createList}>
-      <label htmlFor="new-list">New list name</label>
-      <input id="new-list" value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="e.g. Weekend plans" />
-      <select aria-label="New list kind" value={newListKind} onChange={(event) => setNewListKind(event.target.value as ListKind)}>
-        {(Object.keys(KIND_LABELS) as ListKind[]).map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
+    <form className="quickadd new-list-form" onSubmit={createList}>
+      <span className="qa-icon" aria-hidden="true">+</span>
+      <label htmlFor="new-list" className="sr-only">New list name</label>
+      <input id="new-list" value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="New list…" />
+      <select aria-label="New list kind" className="kind-select" value={newListKind} onChange={(event) => setNewListKind(event.target.value as ListKind)}>
+        {KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
       </select>
       <button type="submit" disabled={pending.has('create-list')}>{pending.has('create-list') ? 'Creating…' : 'Create list'}</button>
     </form>
 
-    <nav aria-label="Lists" className="list-selector">
-      {orderedLists.map((list) => <button className={selected?.id === list.id ? 'selected' : ''} key={list.id} onClick={() => openList(list)}>
-        {list.pinned && <span className="flag" title="Pinned">📌</span>}
-        {list.favorite && <span className="flag" title="Favorite">★</span>}
-        {list.title}
-        <span className="kind-badge">{KIND_LABELS[list.kind]}</span>
+    <nav aria-label="Lists" className="shelf">
+      {orderedLists.map((list) => <button className={`tile kind-${list.kind}` + (selected?.id === list.id ? ' active' : '')} key={list.id} onClick={() => openList(list)}>
+        <span className="tile-dot" aria-hidden="true" />
+        <span className="tile-name">{list.title}</span>
+        <span className="tile-foot">
+          {list.pinned && <span className="tile-flag" title="Pinned">📌</span>}
+          {list.favorite && <span className="tile-flag" title="Favorite">★</span>}
+          <span className="tile-kind">{KIND_LABELS[list.kind]}</span>
+        </span>
       </button>)}
     </nav>
 
-    {selected && <section className="list-detail" aria-labelledby="list-title">
-      <div className="list-heading">
-        {editingTitle
-          ? <input
-              aria-label="List title"
-              autoFocus
-              value={titleDraft}
-              onChange={(event) => setTitleDraft(event.target.value)}
-              onBlur={renameList}
-              onKeyDown={(event) => event.key === 'Enter' && renameList()}
-            />
-          : <h2 id="list-title" onClick={() => { setTitleDraft(selected.title); setEditingTitle(true); }}>{selected.title}</h2>}
-        <span>{completedCount}/{selected.items.length} done</span>
+    {selected && <section className="sheet" aria-labelledby="list-title">
+      <div className="sheet-head">
+        <div className="title-row">
+          <span className={`kind-dot kind-${selected.kind}`} aria-hidden="true" />
+          {editingTitle
+            ? <input
+                aria-label="List title"
+                autoFocus
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={renameList}
+                onKeyDown={(event) => event.key === 'Enter' && renameList()}
+              />
+            : <h2 id="list-title" onClick={() => { setTitleDraft(selected.title); setEditingTitle(true); }}>{selected.title}</h2>}
+        </div>
+        <span className="progress" aria-label={`${completedCount} of ${selected.items.length} done`}>{completedCount}/{selected.items.length}</span>
+        <div className="menu-wrap" ref={menuRef}>
+          <button type="button" className="kebab" aria-label="List actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>⋯</button>
+          {menuOpen && <div className="menu" role="menu">
+            <span className="menu-label">Kind</span>
+            <div className="kind-swatches">
+              {KINDS.map((kind) => <button
+                type="button"
+                key={kind}
+                className={`kind-${kind}` + (selected.kind === kind ? ' active' : '')}
+                onClick={() => changeKind(kind)}
+              >{KIND_LABELS[kind]}</button>)}
+            </div>
+            <hr />
+            <button type="button" onClick={() => toggleListFlag('pinned')}>{selected.pinned ? '📌 Pinned' : 'Pin list'}</button>
+            <button type="button" onClick={() => toggleListFlag('favorite')}>{selected.favorite ? '★ Favorited' : 'Favorite'}</button>
+            <hr />
+            <button type="button" className="danger" onClick={() => { setMenuOpen(false); deleteList(); }}>Delete list</button>
+          </div>}
+        </div>
       </div>
 
-      <div className="list-toolbar">
-        <select aria-label="List kind" value={selected.kind} onChange={(event) => changeKind(event.target.value as ListKind)}>
-          {(Object.keys(KIND_LABELS) as ListKind[]).map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
-        </select>
-        <button type="button" className={selected.pinned ? 'toggle active' : 'toggle'} onClick={() => toggleListFlag('pinned')}>{selected.pinned ? 'Pinned' : 'Pin'}</button>
-        <button type="button" className={selected.favorite ? 'toggle active' : 'toggle'} onClick={() => toggleListFlag('favorite')}>{selected.favorite ? 'Favorited' : 'Favorite'}</button>
-        <select aria-label="Sort items" value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-          <option value="manual">Manual order</option>
-          <option value="priority">By priority</option>
-          <option value="dueDate">By due date</option>
-        </select>
-        <button type="button" className="danger" onClick={deleteList}>Delete list</button>
+      <div className="segmented" role="group" aria-label="Sort items">
+        <button type="button" className={sortMode === 'manual' ? 'active' : ''} onClick={() => setSortMode('manual')}>Manual</button>
+        <button type="button" className={sortMode === 'priority' ? 'active' : ''} onClick={() => setSortMode('priority')}>Priority</button>
+        <button type="button" className={sortMode === 'dueDate' ? 'active' : ''} onClick={() => setSortMode('dueDate')}>Due date</button>
       </div>
 
-      <form className="capture item-capture" onSubmit={createItem}>
-        <label htmlFor="new-item">Add an item</label>
-        <input id="new-item" value={newItemText} onChange={(event) => setNewItemText(event.target.value)} placeholder="What needs doing?" />
-        <button type="submit" disabled={pending.has('create-item')}>{pending.has('create-item') ? 'Adding…' : 'Add item'}</button>
+      <ul className="items">
+        {visibleItems.map((item) => <li key={item.id} className={'item' + (item.completed ? ' done' : '')}>
+          {editingItemId === item.id
+            ? <div className="item-edit">
+                <input aria-label="Item text" value={itemDraft.text} onChange={(event) => setItemDraft((draft) => ({ ...draft, text: event.target.value }))} />
+                <select aria-label="Item priority" value={itemDraft.priority} onChange={(event) => setItemDraft((draft) => ({ ...draft, priority: event.target.value as Priority }))}>
+                  <option value="low">Low</option>
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                </select>
+                <input aria-label="Item due date" type="date" value={itemDraft.dueDate} onChange={(event) => setItemDraft((draft) => ({ ...draft, dueDate: event.target.value }))} />
+                <input aria-label="Item note" value={itemDraft.note} onChange={(event) => setItemDraft((draft) => ({ ...draft, note: event.target.value }))} placeholder="Note" />
+                <button type="button" onClick={() => saveItemEdit(item.id)}>Save</button>
+                <button type="button" className="link" onClick={() => setEditingItemId(null)}>Cancel</button>
+              </div>
+            : <>
+                <input
+                  type="checkbox"
+                  className="check"
+                  checked={item.completed}
+                  onChange={() => toggleItem(item)}
+                  disabled={pending.has(`item:${item.id}`)}
+                  aria-label={item.completed ? `Mark "${item.text}" as not done` : `Mark "${item.text}" as done`}
+                />
+                <div className="item-body">
+                  <div className="item-main">
+                    <span className="item-text" onClick={() => toggleItem(item)}>{item.text}</span>
+                    {item.priority && item.priority !== 'normal' && <span className={`pdot priority-${item.priority}`} title={PRIORITY_LABELS[item.priority]} aria-label={PRIORITY_LABELS[item.priority]} />}
+                  </div>
+                  {(item.dueDate || item.note) && <div className="meta">
+                    {item.dueDate && <span className={'due' + (isOverdue(item.dueDate, item.completed) ? ' overdue' : '')}>{isOverdue(item.dueDate, item.completed) ? 'Overdue · ' : 'Due '}{formatDueDate(item.dueDate)}</span>}
+                    {item.note && <span className="note">{item.note}</span>}
+                  </div>}
+                </div>
+                <div className="item-actions">
+                  <button type="button" className="icon-btn" aria-label="Move up" disabled={sortMode !== 'manual' || pending.has(`item:${item.id}`)} onClick={() => moveItem(item, 'up')}>↑</button>
+                  <button type="button" className="icon-btn" aria-label="Move down" disabled={sortMode !== 'manual' || pending.has(`item:${item.id}`)} onClick={() => moveItem(item, 'down')}>↓</button>
+                  <button type="button" className="icon-btn" aria-label="Edit" onClick={() => startEditItem(item)}>
+                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M11.3 1.7a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1l-7.8 7.8-3.4.9.9-3.4Z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+                  </button>
+                  <button type="button" className="icon-btn danger" aria-label="Delete" onClick={() => deleteItem(item)}>✕</button>
+                </div>
+              </>}
+        </li>)}
+      </ul>
+
+      <form className="quickadd item-quickadd" onSubmit={createItem}>
+        <span className="qa-icon" aria-hidden="true">+</span>
+        <label htmlFor="new-item" className="sr-only">Add an item</label>
+        <input id="new-item" value={newItemText} onChange={(event) => setNewItemText(event.target.value)} placeholder="Add an item…" />
         <button type="button" className="link" onClick={() => setShowItemDetails((current) => !current)}>{showItemDetails ? 'Fewer details' : 'More details'}</button>
+        <button type="submit" disabled={pending.has('create-item')}>{pending.has('create-item') ? 'Adding…' : 'Add item'}</button>
         {showItemDetails && <div className="item-details">
           <label>
             Priority
@@ -322,39 +415,6 @@ export function App() {
           </label>
         </div>}
       </form>
-
-      <ul className="items">
-        {visibleItems.map((item) => <li key={item.id} className={item.priority ? `priority-${item.priority}` : ''}>
-          {editingItemId === item.id
-            ? <div className="item-edit">
-                <input aria-label="Item text" value={itemDraft.text} onChange={(event) => setItemDraft((draft) => ({ ...draft, text: event.target.value }))} />
-                <select aria-label="Item priority" value={itemDraft.priority} onChange={(event) => setItemDraft((draft) => ({ ...draft, priority: event.target.value as Priority }))}>
-                  <option value="low">Low</option>
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
-                </select>
-                <input aria-label="Item due date" type="date" value={itemDraft.dueDate} onChange={(event) => setItemDraft((draft) => ({ ...draft, dueDate: event.target.value }))} />
-                <input aria-label="Item note" value={itemDraft.note} onChange={(event) => setItemDraft((draft) => ({ ...draft, note: event.target.value }))} placeholder="Note" />
-                <button type="button" onClick={() => saveItemEdit(item.id)}>Save</button>
-                <button type="button" className="link" onClick={() => setEditingItemId(null)}>Cancel</button>
-              </div>
-            : <>
-                <label>
-                  <input type="checkbox" checked={item.completed} onChange={() => toggleItem(item)} disabled={pending.has(`item:${item.id}`)} />
-                  <span className="item-text">{item.text}</span>
-                  {item.priority && item.priority !== 'normal' && <span className={`priority-badge priority-${item.priority}`}>{item.priority}</span>}
-                  {item.dueDate && <span className="due-date">due {item.dueDate}</span>}
-                </label>
-                {item.note && <p className="item-note">{item.note}</p>}
-                <div className="item-actions">
-                  <button type="button" className="icon" aria-label="Move up" disabled={sortMode !== 'manual' || pending.has(`item:${item.id}`)} onClick={() => moveItem(item, 'up')}>↑</button>
-                  <button type="button" className="icon" aria-label="Move down" disabled={sortMode !== 'manual' || pending.has(`item:${item.id}`)} onClick={() => moveItem(item, 'down')}>↓</button>
-                  <button type="button" className="link" onClick={() => startEditItem(item)}>Edit</button>
-                  <button type="button" className="link danger" onClick={() => deleteItem(item)}>Delete</button>
-                </div>
-              </>}
-        </li>)}
-      </ul>
     </section>}
   </main>;
 }
