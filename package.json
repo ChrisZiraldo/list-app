@@ -11,6 +11,9 @@
     "format": "prettier --write .",
     "build": "tsc && vite build",
     "mcp": "node dist/server/mcp-main.js",
+    "reminders:mcp": "node dist/server/reminders/mcp-main.js",
+    "reminders:start": "node dist/server/reminders/main.js",
+    "reminders:build": "tsc && vite build --config reminders/vite.config.ts",
     "server:smoke": "tsx server/smoke.ts",
     "dev": "vite",
     "start": "node dist/server/main.js"

@@ -50,3 +50,9 @@ Set both `LISTS_REMINDER_WEBHOOK_URL` and `LISTS_REMINDER_WEBHOOK_SECRET` to ena
 ## PWA
 
 `public/manifest.json`, `public/icon.svg`, and `public/sw.js` make the app installable to a phone home screen. The service worker does no offline caching — it exists only to satisfy Chrome/Android's installability check (a controlling SW with a fetch handler); every request still goes to the network.
+
+## Reminders dashboard (not deployed)
+
+`reminders/` is a separate React/Vite client and `server/reminders/` is a loopback-only Fastify service over the existing Hermes cron CLI. Its bridge invokes `hermes` with argument arrays via `execFile`, never a shell; `/api/reminders` lists jobs, and the API/MCP support create, edit, pause, resume, and delete.
+
+Build it with `npm run reminders:build`; run the service with `REMINDERS_PORT=3458 npm run reminders:start`; and expose the MCP server with `npm run reminders:mcp`. Deployment deliberately remains pending: add a dedicated `reminders-app.service` bound to `127.0.0.1:3458`, configure Tailscale Serve `/reminders` to that loopback port, configure the native MCP command as `node /home/hermes/lists-app/dist/server/reminders/mcp-main.js`, then verify loopback/Tailnet `/health`, the UI/API, and MCP discovery. Do not alter the existing `/lists` route or `lists-app.service`.
