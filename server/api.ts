@@ -16,9 +16,9 @@ const listUpdateInput = z.object({
 const listIdParams = z.object({ listId: z.uuid() });
 const itemInput = z.object({
   text: z.string(),
-  note: z.string().optional(),
+  note: z.string().nullable().optional(),
   priority: z.enum(['low', 'normal', 'high']).optional(),
-  dueDate: z.string().optional(),
+  dueDate: z.string().nullable().optional(),
   reminderAt: z.string().optional().nullable(),
   snoozedUntil: z.string().optional(),
   completed: z.boolean().optional(),

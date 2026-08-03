@@ -3,9 +3,9 @@ import { ListsRepository, type Item, type List, type ListKind } from './reposito
 
 type ItemInput = {
   text: string;
-  note?: string;
+  note?: string | null;
   priority?: 'low' | 'normal' | 'high';
-  dueDate?: string;
+  dueDate?: string | null;
   reminderAt?: string | null;
   snoozedUntil?: string;
   completed?: boolean;
@@ -76,7 +76,7 @@ export class ListsService {
     const item = this.repository.getItems(existing.listId).find((candidate) => candidate.id === itemId)!;
     const priority = input.priority ?? item.priority ?? 'normal';
     if (!['low', 'normal', 'high'].includes(priority)) throw new Error('invalid priority');
-    const note = input.note === undefined ? item.note : input.note.trim() || null;
+    const note = input.note === undefined ? item.note : input.note?.trim() || null;
     if (note && /[\r\n]/.test(note)) throw new Error('note must be a single line');
     const completed = input.completed ?? item.completed;
     this.repository.db
@@ -87,7 +87,7 @@ export class ListsService {
         input.text?.trim() || item.text,
         note,
         priority,
-        input.dueDate ?? item.dueDate,
+        input.dueDate === undefined ? item.dueDate : input.dueDate,
         input.reminderAt === undefined ? item.reminderAt : input.reminderAt,
         input.snoozedUntil ?? item.snoozedUntil,
         completed ? 1 : 0,

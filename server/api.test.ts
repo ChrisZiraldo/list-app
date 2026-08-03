@@ -95,6 +95,28 @@ describe('Lists HTTP API', () => {
     await app.close();
   });
 
+  it('saves an item edit when optional fields are cleared', async () => {
+    const app = createApi();
+    const list = (await app.inject({ method: 'POST', url: '/api/lists', payload: { title: 'Today', kind: 'todo' } })).json();
+    const item = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/lists/${list.id}/items`,
+        payload: { text: 'Call Mum', note: 'after lunch', dueDate: '2026-08-04' },
+      })
+    ).json();
+
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/api/items/${item.id}`,
+      payload: { text: 'Call Dad', note: null, priority: 'normal', dueDate: null, reminderAt: null },
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({ id: item.id, text: 'Call Dad', note: null, dueDate: null, reminderAt: null });
+    await app.close();
+  });
+
   it('renames a list through a patch request', async () => {
     const app = createApi();
     const list = (await app.inject({ method: 'POST', url: '/api/lists', payload: { title: 'Today', kind: 'todo' } })).json();
